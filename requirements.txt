@@ -1,0 +1,7 @@
+streamlit>=1.40
+google-genai>=1.0
+pydantic>=2
+pandas
+pyyaml
+pypdf
+huggingface_hub
