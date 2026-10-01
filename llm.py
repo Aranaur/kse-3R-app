@@ -10,7 +10,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
 
 class Report(BaseModel):
@@ -29,7 +29,7 @@ class Report(BaseModel):
 def _client() -> genai.Client:
     key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
-        raise RuntimeError("Не задано GEMINI_API_KEY у Secrets цього Space.")
+        raise RuntimeError("Не задано GEMINI_API_KEY у Secrets застосунку.")
     return genai.Client(api_key=key)
 
 

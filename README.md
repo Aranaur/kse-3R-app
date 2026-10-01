@@ -24,7 +24,7 @@
 | `TEACHER_PASSWORD` | пароль для панелі викладача |
 | `HF_TOKEN` | fine-grained токен HF (<https://huggingface.co/settings/tokens>) з правом write на `DATA_REPO` |
 | `DATA_REPO` | приватний HF dataset для завдань і звітів, напр. `aranaur/kse-3r-bot-data` |
-| `GEMINI_MODEL` | необов'язково, за замовчуванням `gemini-2.5-flash` |
+| `GEMINI_MODEL` | необов'язково, за замовчуванням `gemini-3.8-flash` |
 | `MAX_FOLLOWUPS` | необов'язково, скільки уточнень без прогресу (4) |
 
 Без `HF_TOKEN`/`DATA_REPO` застосунок працює, але завдання й звіти зникають після
