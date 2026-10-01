@@ -146,6 +146,12 @@ def student_view() -> None:
             with st.chat_message("assistant"):
                 try:
                     reply = st.write_stream(llm.stream_reply(system_prompt(a), ss.history))
+                except llm.ModelBusyError:
+                    ss.history.pop()
+                    st.warning("Сервер ШІ зараз перевантажений. Зачекай хвилину й надішли повідомлення ще раз. "
+                               "Твій текст (скопіюй його):")
+                    st.code(prompt, language=None, wrap_lines=True)
+                    return
                 except Exception as e:  # noqa: BLE001
                     ss.history.pop()
                     st.error(f"Помилка звернення до моделі: {e}")
@@ -158,6 +164,10 @@ def student_view() -> None:
                 try:
                     rep = llm.make_report(system_prompt(a), ss.history, REPORT_PROMPT.format(
                         report_extra=a.get("report_instructions", "")))
+                except llm.ModelBusyError:
+                    st.warning("Сервер ШІ зараз перевантажений. Зачекай хвилину й натисни «Завершити» ще раз — "
+                               "діалог збережено.")
+                    return
                 except Exception as e:  # noqa: BLE001
                     st.error(f"Не вдалося сформувати звіт: {e}")
                     return
