@@ -6,7 +6,7 @@ import os
 import re
 import time
 from functools import lru_cache
-from typing import Callable, Iterator, TypeVar
+from typing import Callable, TypeVar
 
 from google import genai
 from google.genai import errors, types
@@ -102,22 +102,15 @@ def _to_contents(history: list[dict]) -> list[types.Content]:
     ]
 
 
-def stream_reply(system: str, history: list[dict]) -> Iterator[str]:
-    def start(model: str):
-        stream = iter(_client().models.generate_content_stream(
-            model=model,
-            contents=_to_contents(history),
-            config=types.GenerateContentConfig(system_instruction=system, temperature=0.4),
-        ))
-        # Помилки перевантаження приходять із першим чанком — тягнемо його тут, щоб їх можна було повторити
-        return stream, next(stream, None)
-
-    stream, first = _with_fallback(start)
-    if first is not None and first.text:
-        yield first.text
-    for chunk in stream:
-        if chunk.text:
-            yield chunk.text
+def reply(system: str, history: list[dict]) -> str:
+    # Без стрімінгу: Gemini може надіслати 503 посеред стріму, коли повторити вже неможливо.
+    # Відповіді короткі (1–3 речення), тож цілою відповіддю — надійніше.
+    resp = _with_fallback(lambda model: _client().models.generate_content(
+        model=model,
+        contents=_to_contents(history),
+        config=types.GenerateContentConfig(system_instruction=system, temperature=0.4),
+    ))
+    return (resp.text or "").strip() or "Вибач, не зміг сформулювати відповідь. Спробуй переказати ще раз іншими словами."
 
 
 def make_report(system: str, history: list[dict], report_prompt: str) -> Report:

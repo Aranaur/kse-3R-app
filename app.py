@@ -145,7 +145,9 @@ def student_view() -> None:
             st.chat_message("user").write(prompt)
             with st.chat_message("assistant"):
                 try:
-                    reply = st.write_stream(llm.stream_reply(system_prompt(a), ss.history))
+                    with st.spinner("Думаю…"):
+                        reply = llm.reply(system_prompt(a), ss.history)
+                    st.write(reply)
                 except llm.ModelBusyError:
                     ss.history.pop()
                     st.warning("Сервер ШІ зараз перевантажений. Зачекай хвилину й надішли повідомлення ще раз. "
