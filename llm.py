@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from typing import Iterator
 
 from google import genai
@@ -24,6 +25,7 @@ class Report(BaseModel):
     teacher_summary: str = Field(description="Короткий висновок для викладача (2–3 речення)")
 
 
+@lru_cache(maxsize=1)  # один клієнт на процес: інакше його закриває GC посеред стрімінгу
 def _client() -> genai.Client:
     key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
