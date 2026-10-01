@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from functools import lru_cache
 from typing import Callable, Iterator, TypeVar
@@ -11,11 +12,15 @@ from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, Field
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-# Запасні моделі через кому — на випадок перевантаження (503) або вичерпаного ліміту (429) основної
-FALLBACK_MODELS = [m.strip() for m in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-flash-latest").split(",") if m.strip()]
+# Ліміти безкоштовного рівня рахуються окремо для кожної моделі, тому ланцюжок моделей
+# множить загальну квоту. Першими — Flash Lite (15 RPM / 500 RPD), далі Flash (5 RPM / 20 RPD).
+DEFAULT_CHAIN = ("gemini-3.5-flash-lite, gemini-3.1-flash-lite, gemini-3.8-flash, gemini-3.7-flash, "
+                 "gemini-3.6-flash, gemini-3.5-flash, gemini-3-flash")
+MODEL = os.getenv("GEMINI_MODEL", DEFAULT_CHAIN.split(",")[0].strip())
+FALLBACK_MODELS = [m.strip() for m in os.getenv("GEMINI_FALLBACK_MODELS", DEFAULT_CHAIN).split(",") if m.strip()]
 RETRIES_PER_MODEL = 3
-_RETRYABLE = {429, 500, 503, 504}
+COOLDOWN_SEC = 60  # після 429 модель пропускається цей час
+_cooldown: dict[str, float] = {}
 
 T = TypeVar("T")
 
@@ -24,18 +29,46 @@ class ModelBusyError(RuntimeError):
     """Усі моделі тимчасово недоступні."""
 
 
+@lru_cache(maxsize=1)
+def _available() -> frozenset[str] | None:
+    """ID моделей, доступних ключу (без префікса models/); None — якщо список отримати не вдалося."""
+    try:
+        return frozenset(m.name.removeprefix("models/") for m in _client().models.list())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _resolve(name: str) -> str | None:
+    """Точний ID або його preview-/датована версія (напр. gemini-3.5-flash-lite-preview-09-2026)."""
+    avail = _available()
+    if avail is None or name in avail:
+        return name
+    variants = sorted(m for m in avail if re.fullmatch(re.escape(name) + r"(-preview.*|-\d{2,}.*|-latest)", m))
+    return variants[0] if variants else None
+
+
+def model_chain() -> list[str]:
+    resolved = (_resolve(m) for m in dict.fromkeys([MODEL, *FALLBACK_MODELS]))
+    return [m for m in dict.fromkeys(resolved) if m]
+
+
 def _with_fallback(call: Callable[[str], T]) -> T:
-    """Повторює виклик з експоненційною паузою, потім переходить до запасних моделей."""
+    """Пробує моделі по черзі: 429 — одразу наступна (і пауза для цієї), 5xx — повтор з паузою."""
     last: Exception | None = None
-    for model in dict.fromkeys([MODEL, *FALLBACK_MODELS]):
+    chain = model_chain()
+    ready = [m for m in chain if _cooldown.get(m, 0) < time.time()] or chain
+    for model in ready:
         for attempt in range(RETRIES_PER_MODEL):
             try:
                 return call(model)
             except errors.APIError as e:
                 last = e
-                if e.code == 404:  # модель недоступна — одразу наступна
+                if e.code == 429:
+                    _cooldown[model] = time.time() + COOLDOWN_SEC
                     break
-                if e.code not in _RETRYABLE:
+                if e.code == 404:
+                    break
+                if e.code not in (500, 503, 504):
                     raise
                 time.sleep(2 ** attempt)
     raise ModelBusyError(str(last)) from last

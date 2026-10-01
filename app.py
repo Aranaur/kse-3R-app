@@ -292,5 +292,6 @@ def teacher_view() -> None:
 
 
 mode = st.sidebar.radio("Режим", ["Учень", "Викладач"], label_visibility="collapsed")
-st.sidebar.caption(f"Модель: `{llm.MODEL}`")
+_chain = llm.model_chain()
+st.sidebar.caption(f"Модель: `{_chain[0] if _chain else llm.MODEL}` (+{max(len(_chain) - 1, 0)} запасних)")
 student_view() if mode == "Учень" else teacher_view()
